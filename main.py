@@ -8,6 +8,7 @@ https://tildegit.org/solderpunk/gemini-demo-1
 
 # Python Built-in
 import re
+import os
 from datetime import datetime
 
 # Reading Gemini
@@ -44,6 +45,7 @@ def absolutise_url(base, relative):
 
     return relative
 
+
 # Gemtext to HTML - Code block
 
 # A dictionary that maps regex to match at the beginning of gmi lines
@@ -56,6 +58,7 @@ tags_dict = {
     r"^> (.*)": "blockquote",
     r"^=>\s*(\S+)(\s+.*)?": "a",
 }
+
 
 def convert_single_line(gmi_line, url):
     """This function takes a string of gemtext as input and returns a string of HTML."""
@@ -73,7 +76,7 @@ def convert_single_line(gmi_line, url):
 
                 href = absolutise_url(base=url, relative=href)
 
-                html_a = f"<a href='{href}'>{inner_text}</a>"
+                html_a = f"<p><a href='{href}'>{inner_text}</a></p>"
                 return html_a
 
             inner_text = groups[0].strip()
@@ -277,7 +280,7 @@ def create_epub(posts_list: list):
     # Set metadata
     book.set_identifier(EPUB_TITLE)
     current_date: str = datetime.now().strftime("%Y-%m-%d")
-    title = f"{EPUB_TITLE} ({current_date})"
+    title = f"{EPUB_TITLE}\n({current_date})"
     print(f"Title for the ePub: {title}")
 
     book.set_title(title)
@@ -308,9 +311,10 @@ def create_epub(posts_list: list):
     book.spine = ["nav"] + chapters
 
     # Write the file
-    save_path: str = f"{EPUB_FILENAME}-{current_date}.epub"
-    epub.write_epub(save_path, book, {})
-    print(f"ePub created in {save_path}")
+    file_name: str = f"{EPUB_FILENAME}-{current_date}.epub"
+    file_path: str = os.path.join(OUTPUT_FOLDER, file_name)
+    epub.write_epub(file_path, book, {})
+    print(f"ePub created to {file_path}")
 
 
 # Main code starts here
