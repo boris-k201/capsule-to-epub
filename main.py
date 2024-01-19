@@ -8,271 +8,170 @@ https://github.com/aerkalov/ebooklib
 https://tildegit.org/solderpunk/gemini-demo-1
 """
 
-# Datetime
-import pytz
-from datetime import datetime
+# Python Built-in
+from decimal import DivisionByZero
 
-# Atom Feed parsing
-import atoma
+# import re
+from datetime import datetime
 
 # Reading Gemini
 import ssl
-import cgi
 import socket
-import tempfile
 import urllib.parse
-
-# Gemini to HTML
-import re
+from email.message import Message
 
 # ePub
-from ebooklib import epub
+#from ebooklib import epub
+
+BASE_URL = "gemini://text.eapl.mx/posts"
+TEXT_FOR_NEXT_PAGE = "Older posts"
+
 
 def absolutise_url(base, relative):
-	"""Absolutise relative links."""
+    """Absolutise relative links."""
 
-	# Based on https://tildegit.org/solderpunk/gemini-demo-1
-	if "://" not in relative:
-		if 'gemini://' in base:
-			# Python's URL tools somehow only work with known schemes?
-			base = base.replace("gemini://", "http://")
-			relative = urllib.parse.urljoin(base, relative)
-			relative = relative.replace("http://", "gemini://")
-		if 'http://' in base:
-			relative = urllib.parse.urljoin(base, relative)
+    # Based on https://tildegit.org/solderpunk/gemini-demo-1
+    if "://" not in relative:
+        if "gemini://" in base:
+            # Python's URL tools somehow only work with known schemes?
+            base = base.replace("gemini://", "http://")
+            relative = urllib.parse.urljoin(base, relative)
+            relative = relative.replace("http://", "gemini://")
+        if "http://" in base:
+            relative = urllib.parse.urljoin(base, relative)
 
-	return relative
+    return relative
 
-def read_url(url, title='', author=''):
-	parsed_url = urllib.parse.urlparse(url)
 
-	try: # Get the Gemini content
-		while True:
-			s = socket.create_connection((parsed_url.netloc, 1965))
-			context = ssl.SSLContext(protocol=ssl.PROTOCOL_TLS_CLIENT)
-			context.check_hostname = False
-			context.verify_mode = ssl.CERT_NONE
-			s = context.wrap_socket(s, server_hostname = parsed_url.netloc)
-			s.sendall((url + '\r\n').encode('UTF-8'))
+def read_url(url):
+    """Gets an URL"""
+    parsed_url = urllib.parse.urlparse(url)
 
-			# Get header and check for redirects
-			fp = s.makefile('rb')
-			header = fp.readline()
-			header = header.decode('UTF-8').strip()
-			split_header = header.split()
-			status = split_header[0]
-			mime = split_header[1]
-			# TODO: Fix case when you receive a header like '20 text/gemini; lang=en'
+    try:  # Get the Gemini content
+        while True:
+            s = socket.create_connection((parsed_url.netloc, 1965))
+            context = ssl.SSLContext(protocol=ssl.PROTOCOL_TLS_CLIENT)
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
 
-			if status.startswith('1'): # Handle input requests
-				query = input('INPUT' + mime + '> ') # Prompt
-				url += '?' + urllib.parse.quote(query) # Bit lazy...
-			elif status.startswith('3'): # Follow redirects
-				url = absolutise_url(url, mime)
-				parsed_url = urllib.parse.urlparse(url)
-			else: # Otherwise, we're done.
-				break
-	except Exception as err:
-		print(err)
-		return
+            s = context.wrap_socket(s, server_hostname=parsed_url.netloc)
+            s.sendall((url + "\r\n").encode("UTF-8"))
 
-	# Fail if transaction was not successful
-	if not status.startswith('2'):
-		print(f'Error {status}: {mime}')
-		return
+            # Get header and check for redirects
+            fp = s.makefile("rb")
+            header = fp.readline()
+            header = header.decode("UTF-8").strip()
+            split_header = header.split()
+            status = split_header[0]
+            mime = split_header[1]
+            # Fix case when you receive a header like '20 text/gemini; lang=en'
 
-	if mime.startswith("text/xml"): # Handle XML Atom feed
-		tmpfp = tempfile.NamedTemporaryFile('wb', delete=False)
-		feed = atoma.parse_atom_bytes(fp.read())
+            if status.startswith("1"):  # Handle input requests
+                query = input("INPUT" + mime + "> ")  # Prompt
+                url += "?" + urllib.parse.quote(query)  # Bit lazy...
+            elif status.startswith("3"):  # Follow redirects
+                url = absolutise_url(url, mime)
+                parsed_url = urllib.parse.urlparse(url)
+            else:  # Otherwise, we're done.
+                break
+    except DivisionByZero as err:
+        print(err)
+        return None
 
-		# TODO: Change this avalanche of ifs
-		for entry in feed.entries:
-			if (len(entry.links) > 0):
-				if initial_date < entry.updated < final_date:
-					url_to_read = entry.links[0].href
+    # Fail if transaction was not successful
+    if not status.startswith("2"):
+        print(f"Error {status}: {mime}")
+        return None
 
-					if include_all_urls:
-						in_allowed_urls = True
-					else:
-						in_allowed_urls = False
-						for current_url in allowed_urls:
-							if current_url in url_to_read:
-								in_allowed_urls = True
-								break
+    if mime.startswith("text/"):
+        # Decode according to declared charset
+        m = Message()
+        m["content-type"] = mime
+        m.get_params()
 
-					if in_allowed_urls:
-						print(f'Loading URL: {url_to_read}')
-						read_url(url=str(url_to_read), title=entry.title.value, author=entry.authors[0].name)
+        body = fp.read()
+        body = body.decode(m.get_param("charset", "UTF-8"))
 
-		tmpfp.write(fp.read())
-		tmpfp.close()
+        return body
 
-		return
+    return None
 
-	if mime.startswith("text/"):
-		# Decode according to declared charset
-		mime, mime_opts = cgi.parse_header(mime)
-		body = fp.read()
-		body = body.decode(mime_opts.get('charset', 'UTF-8'))
+def is_valid_date(date_str, date_format="%Y-%m-%d") -> bool:
+    """Returns True if the str is a valid YYYY-MM-DD."""
+    try:
+        datetime.strptime(date_str, date_format)
+        return True
+    except ValueError:
+        return False
 
-		html = convert_to_html(body, url)
-		html += f'\n<hr><p><a href={url}>{url}</a></p>'
 
-		# Create a chapter in the ePub
-		chapter = epub.EpubHtml(title=f'{author}: {title}', file_name=f'chapter_{str(len(chapters)).rjust(3, "0")}.xhtml', lang='en')
-		chapter.content = html
-		chapters.append(chapter)
+def extract_posts(body: str, posts: list) -> tuple[list, str | None]:
+    """From a Gemtext, returns the URLs list, and URL for next page."""
+    next_page: str = None
 
-# Gemtext to HTML - Code block
+    for line in body.splitlines():
+        # print(line)
+        split_tuple = line.split(" ")
 
-# A dictionary that maps regex to match at the beginning of gmi lines
-# to their corresponding HTML tag names. Used by convert_single_line().
-tags_dict = {
-	r"^# (.*)": "h1",
-	r"^## (.*)": "h2",
-	r"^### (.*)": "h3",
-	r"^\* (.*)": "li",
-	r"^> (.*)": "blockquote",
-	r"^=>\s*(\S+)(\s+.*)?": "a"
-}
+        if "Older posts" in line:
+            next_page = split_tuple[1]
 
-# This function takes a string of gemtext as input and returns a string of HTML
-def convert_single_line(gmi_line, url):
-	for pattern in tags_dict.keys():
-		if match := re.match(pattern, gmi_line):
-			tag = tags_dict[pattern]
-			groups = match.groups()
+        # Not a link ? Skip to the next item
+        if len(split_tuple) < 3:
+            continue
 
-			if tag == "a":
-				href = groups[0]
+        if is_valid_date(split_tuple[2]):
+            url = absolutise_url(BASE_URL, split_tuple[1])
+            time = split_tuple[2]
+            title = " ".join(element for element in split_tuple[3:])
+            posts.append((url, time, title))
 
-				inner_text = str(groups[1]).strip() if len(groups) > 1 else href
-				if inner_text == 'None':
-					inner_text = href
+    return posts, next_page
 
-				href = absolutise_url(base=url, relative=href)
 
-				html_a = f"<a href='{href}'>{inner_text}</a>"
-				return html_a
-			else:
-				inner_text = groups[0].strip()
-				return f"<{tag}>{inner_text}</{tag}>"
-	return f"<p>{gmi_line}</p>"
+def get_post_list():
+    """Checks the base URL, retrieves the found posts, iterates through each page
+    and stops when there are no more pages."""
+    current_url = BASE_URL
+    are_more_posts = True
+    posts_list = []
 
-# Reads the contents of the input file line by line and outputs HTML.
-# Renders text in preformat blocks (toggled by ```) as multiline <pre> tags.
-def convert_to_html(text, url):
-	preformat = False
-	in_list = False
+    while are_more_posts:
+        print(f"{current_url=}")
+        posts_list, next_page = extract_posts(read_url(current_url), posts_list)
+        if next_page is not None:
+            current_url = absolutise_url(BASE_URL, next_page)
 
-	html = ''
+        are_more_posts = next_page is not None
 
-	for line in text.split('\n'):
-		line = line.strip()
+    # print(posts_list)
+    return posts_list
 
-		if len(line):
-			if line.startswith("```") or line.endswith("```"):
-				preformat = not preformat
-				repl = "<pre>" if preformat else "</pre>"
-				html += re.sub(r"```", repl, line)
-			elif preformat:
-				html += line
-			else:
-				html_line = convert_single_line(line, url)
-				if html_line.startswith("<li>"):
-					if not in_list:
-						in_list = True
-						html += "<ul>\n"
+def process_posts_list(posts: list):
+    for post in posts:
+        # 0 = URL, 1 = Date, 2 = Title
+        body = read_url(post[0])
+        if body is None:
+            continue
 
-					html += html_line
-				elif in_list:
-					in_list = False
-					html += "</ul>\n"
-					html += html_line
-				else:
-					html += html_line
+        # Remove header
+        # => /posts <  text.eapl.mx
+        # Remove first 2 lines, and after
+        lines = body.split('\n')
+        body: str = '\n'.join(lines[2:])
 
-		html += '\n'
+        # Remove footer - After EOT
+        parts = body.split("\n\nEOT", 1)
+        body = parts[0]
 
-	return html
+        print(body)
+        print('------')
 
 # Main code starts here
+if __name__ == "__main__":
+    print("-------------------------------------")
+    print("             Capsule to ePub         ")
+    print("-------------------------------------")
+    print(f"Reading capsule: {BASE_URL}")
 
-# Get the current year and week number
-year = datetime.now().year
-week_num = datetime.now().isocalendar().week
-
-# Get the previous week
-# TODO: Fix week_num + 1 error in the last week of the year
-week_num -= 1
-
-print('--------------------------------')
-print('        Antenna to ePub         ')
-print('--------------------------------')
-print('Select a week to read on Antenna')
-selected_year = input(f'Input year (Press Enter for {year}): ')
-if selected_year.strip() != '':
-	try:
-		year = int(selected_year)
-	except Exception as err:
-		print('What kind of year is that?')
-		exit()
-
-selected_week = input(f'Input week number (Press Enter for {week_num}): ')
-if selected_week.strip() != '':
-	try:
-		week_num = int(selected_week)
-	except Exception as err:
-		print('What kind of week is that?')
-		exit()
-
-initial_date = pytz.utc.localize(datetime.fromisocalendar(year, week_num, 1))
-final_date = pytz.utc.localize(datetime.fromisocalendar(year, week_num + 1, 1))
-print(f'Date range to parse: {initial_date.strftime("%Y-%m-%d")} to {final_date.strftime("%Y-%m-%d")} UTC\n')
-
-allowed_urls = []
-include_all_urls = True
-
-with open('allowed_urls.txt') as f:
-	allowed_urls = f.read().splitlines()
-
-include_all_urls_input = input(f'Include only allowed URLs (from allowed_urls.txt)? (Enter for Yes): ')
-
-if include_all_urls_input == '':
-	include_all_urls = False
-
-print(f'So... Are you including all the URLs? {include_all_urls}\n')
-
-book = epub.EpubBook() # Start the ePub library
-
-# Set metadata
-book.set_identifier(f'AntennaZINE {year}-w{week_num}')
-title = f'AntennaZINE {year}-w{week_num} ({initial_date.strftime("%Y-%m-%d")} to {final_date.strftime("%Y-%m-%d")})'
-print(f'Title for the ePub: {title}')
-
-book.set_title(title)
-book.set_language('en')
-book.add_author('Rights belong to the author of respective article')
-
-chapters = [] # Empty list to store every URL into a ePub Chapter
-
-# Read latest entries on Antenna Feed
-url = 'gemini://warmedal.se/~antenna/atom.xml'
-read_url(url)
-
-# When we've finished reading the allowed URLs, create the epub
-for chapter in chapters:
-	book.add_item(chapter)
-
-# Define Table Of Contents
-book.toc = chapters
-
-# Add default NCX and Nav file
-book.add_item(epub.EpubNcx())
-book.add_item(epub.EpubNav())
-
-# Basic spine
-book.spine = ['nav'] + chapters
-
-# Write the file
-epub.write_epub(f'antenna-{year}-w{week_num}.epub', book, {})
+    process_posts_list(get_post_list())

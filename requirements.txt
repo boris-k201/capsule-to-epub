@@ -1,0 +1,2 @@
+EbookLib==0.18
+pytz==2023.3.post1
