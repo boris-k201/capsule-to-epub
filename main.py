@@ -18,7 +18,7 @@ import urllib.parse
 from email.message import Message
 
 # ePub
-from ebooklib import epub
+from ebooklib import epub # type: ignore
 
 BASE_URL = "gemini://text.eapl.mx/posts"
 TEXT_FOR_NEXT_PAGE = "Older posts"
@@ -186,7 +186,7 @@ def is_valid_date(date_str, date_format="%Y-%m-%d") -> bool:
 
 def extract_posts(body: str, url_list: list) -> tuple[list, str | None]:
     """From a Gemtext, returns the URLs list, and URL for next page."""
-    next_page: str = None
+    next_page: str | None = None
 
     for line in body.splitlines():
         # print(line)
@@ -213,7 +213,7 @@ def get_url_list() -> list:
     and stops when there are no more pages."""
     current_url = BASE_URL
     are_more_posts = True
-    url_list = []
+    url_list: list[str] = []
 
     while are_more_posts:
         print(f"Loading {current_url}")
@@ -241,7 +241,7 @@ def process_url_list(url_list: list) -> list:
         # 0 = URL, 1 = Date, 2 = Title
         url: str = post[0]
         print(f"Loading {url}")
-        body = read_url(url)
+        body: str = read_url(url)
         if body is None:
             continue
 
@@ -249,7 +249,7 @@ def process_url_list(url_list: list) -> list:
         # => /posts <  text.eapl.mx
         # Remove first 2 lines, and after
         lines = body.split("\n")
-        body: str = "\n".join(lines[2:])
+        body = "\n".join(lines[2:])
 
         # Remove footer - After EOT
         parts = body.split("\n\nEOT", 1)
@@ -287,7 +287,7 @@ def create_epub(posts_list: list):
     book.set_language(EPUB_LANG)
     book.add_author(EPUB_AUTHOR)
 
-    chapters = []  # Empty list to store every URL into a ePub Chapter
+    chapters: list = []  # Empty list to store every URL into a ePub Chapter
 
     for post in posts_list:
         chapter = epub.EpubHtml(
