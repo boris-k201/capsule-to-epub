@@ -10,6 +10,7 @@ https://tildegit.org/solderpunk/gemini-demo-1
 import re
 import os
 from datetime import datetime
+from typing import List
 
 # Reading Gemini
 import ssl
@@ -189,21 +190,37 @@ def extract_posts(body: str, url_list: list) -> tuple[list, str | None]:
     next_page: str | None = None
 
     for line in body.splitlines():
-        # print(line)
-        split_tuple = line.split(" ")
-
-        if "Older posts" in line:
-            next_page = split_tuple[1]
 
         # Not a link ? Skip to the next item
-        if len(split_tuple) < 3:
+        if line[0:2] != '=>':
+            continue
+        
+        link_url_pos = 2
+        while link_url_pos < len(line) and line[link_url_pos] in [' ', '\t']:
+            link_url_pos += 1
+        link_separator_pos = line.find(' ', link_url_pos)
+        link_text_pos = link_separator_pos
+        while link_text_pos < len(line) and line[link_text_pos] in [' ', '\t']:
+            link_text_pos += 1
+
+        # No link name, therefore no date, so we skip
+        if link_separator_pos == -1 or link_separator_pos == len(line)-1:
             continue
 
-        if is_valid_date(split_tuple[2]):
-            url = absolutise_url(BASE_URL, split_tuple[1])
-            time = split_tuple[2]
-            title = " ".join(element for element in split_tuple[3:])
-            url_list.append((url, time, title))
+        link_url = line[link_url_pos:link_separator_pos]
+        link_text = line[link_text_pos:]
+        link_name_pos = link_text.find(' ')
+        if link_name_pos + 1 >= len(link_text):
+            continue
+        link_time = link_text[:link_name_pos]
+        link_name = link_text[link_name_pos+1:]
+
+        if TEXT_FOR_NEXT_PAGE == link_text:
+            next_page = link_url
+
+        if is_valid_date(link_time):
+            url = absolutise_url(BASE_URL, link_url)
+            url_list.append((url, link_time, link_name))
 
     return url_list, next_page
 
@@ -313,8 +330,11 @@ def create_epub(posts_list: list):
     # Write the file
     file_name: str = f"{EPUB_FILENAME}-{current_date}.epub"
     file_path: str = os.path.join(OUTPUT_FOLDER, file_name)
-    epub.write_epub(file_path, book, {})
-    print(f"ePub created to {file_path}")
+    result = epub.write_epub(file_path, book, {})
+    if result == False:
+        print(f"An error occured while tryin to write to {file_path}")
+    else:
+        print(f"ePub created to {file_path}")
 
 
 # Main code starts here
