@@ -31,12 +31,16 @@ parser.add_argument('-t', '--title', help='Title of the Epub')
 parser.add_argument('-l', '--lang', help='Language of the Epub', default='en')
 parser.add_argument('-a', '--author', help='Author of the Epub')
 parser.add_argument('-f', '--filename', help='Filename of the Epub')
+parser.add_argument('--header', help='Number of lines from the top of the post to be discarded', default=0)
+parser.add_argument('--footer', help='Number of lines from the bottom of the post to be discarded', default=0)
 
 args = parser.parse_args()
 
 BASE_URL = args.base_url
 TEXT_FOR_NEXT_PAGE = args.next_page
 OUTPUT_FOLDER = args.dir
+HEADER = args.header
+FOOTER = args.footer
 
 domain = urllib.parse.urlparse(BASE_URL).netloc
 
@@ -274,6 +278,11 @@ def process_url_list(url_list: list) -> list:
         body: str = read_url(url)
         if body is None:
             continue
+
+        # Remove header and footer
+        # Remove first HEADER lines and last FOOTER lines
+        lines = body.split("\n")
+        body = "\n".join(lines[HEADER:len(lines)-FOOTER])
 
         html = gemtext_to_html(body, url)
         html += f"\n<hr><p><a href={url}>{url}</a></p>"
