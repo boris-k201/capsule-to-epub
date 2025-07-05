@@ -275,16 +275,6 @@ def process_url_list(url_list: list) -> list:
         if body is None:
             continue
 
-        # Remove header
-        # => /posts <  text.eapl.mx
-        # Remove first 2 lines, and after
-        lines = body.split("\n")
-        body = "\n".join(lines[2:])
-
-        # Remove footer - After EOT
-        parts = body.split("\n\nEOT", 1)
-        body = parts[0]
-
         html = gemtext_to_html(body, url)
         html += f"\n<hr><p><a href={url}>{url}</a></p>"
 
