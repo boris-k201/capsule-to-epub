@@ -10,6 +10,7 @@ https://tildegit.org/solderpunk/gemini-demo-1
 import re
 import os
 from datetime import datetime
+import argparse
 from typing import List
 
 # Reading Gemini
@@ -21,14 +22,28 @@ from email.message import Message
 # ePub
 from ebooklib import epub # type: ignore
 
-BASE_URL = "gemini://text.eapl.mx/posts"
-TEXT_FOR_NEXT_PAGE = "Older posts"
-OUTPUT_FOLDER = r"C:\Dev\projects\eaplmx-capsule"
+parser = argparse.ArgumentParser(
+                    description='Download gemlogs and save in epub for offline reading')
+parser.add_argument('base_url', help='Url of the page that contains gemlog links')
+parser.add_argument('-n', '--next-page', help='(regex) Text of a link that leads to the next page', default='Older posts')
+parser.add_argument('-d', '--dir', help='Path to output directory', default='.')
+parser.add_argument('-t', '--title', help='Title of the Epub')
+parser.add_argument('-l', '--lang', help='Language of the Epub', default='en')
+parser.add_argument('-a', '--author', help='Author of the Epub')
+parser.add_argument('-f', '--filename', help='Filename of the Epub')
 
-EPUB_TITLE = "eapl.mx Capsule"
-EPUB_LANG = "en"
-EPUB_AUTHOR = "eapl.mx"
-EPUB_FILENAME = "eaplmx-capsule"
+args = parser.parse_args()
+
+BASE_URL = args.base_url
+TEXT_FOR_NEXT_PAGE = args.next_page
+OUTPUT_FOLDER = args.dir
+
+domain = urllib.parse.urlparse(BASE_URL).netloc
+
+EPUB_TITLE = args.title or f'{domain} Capsule'
+EPUB_LANG = args.lang
+EPUB_AUTHOR = args.author or domain
+EPUB_FILENAME = args.filename or f"{domain.replace('.', '')}-capsule"
 
 
 def absolutise_url(base, relative):
