@@ -202,7 +202,7 @@ def is_valid_date(date_str, date_format="%Y-%m-%d") -> bool:
 
 def extract_posts(body: str, url_list: list) -> tuple[list, str | None]:
     """From a Gemtext, returns the URLs list, and URL for next page."""
-    next_page: str | None = None
+    next_pages: List[str] = []
 
     for line in body.splitlines():
 
@@ -230,37 +230,35 @@ def extract_posts(body: str, url_list: list) -> tuple[list, str | None]:
         link_time = link_text[:link_name_pos]
         link_name = link_text[link_name_pos+1:]
 
-        if TEXT_FOR_NEXT_PAGE == link_text:
-            next_page = link_url
+        if re.match(TEXT_FOR_NEXT_PAGE, link_text):
+            next_pages += [link_url]
 
         if is_valid_date(link_time):
             url = absolutise_url(BASE_URL, link_url)
             url_list.append((url, link_time, link_name))
 
-    return url_list, next_page
+    return url_list, next_pages
 
 
 def get_url_list() -> list:
     """Checks the base URL, retrieves the found posts, iterates through each page
     and stops when there are no more pages."""
-    current_url = BASE_URL
-    are_more_posts = True
+    current_urls = [BASE_URL]
     url_list: list[str] = []
 
-    while are_more_posts:
-        print(f"Loading {current_url}")
-        body: str | None = read_url(current_url)
+    while len(current_urls) > 0:
+        print(f"Loading {current_urls[0]}")
+        body: str | None = read_url(current_urls[0])
+        current_urls.pop(0)
         if body is None:
             print("A problem occured. Check your Internet or the URL!")
             return []
 
-        url_list, next_page = extract_posts(body, url_list)
-        if next_page is not None:
-            current_url = absolutise_url(BASE_URL, next_page)
-
-        are_more_posts = next_page is not None
+        url_list, next_pages = extract_posts(body, url_list)
+        current_urls += [absolutise_url(BASE_URL, next_page) for next_page in next_pages]
 
     # print(url_list)
+    url_list.sort(key=lambda url: url[1])
     return url_list
 
 
