@@ -65,6 +65,7 @@ EPUB_LANG = args.lang
 EPUB_AUTHOR = args.author or domain
 EPUB_FILENAME = args.filename or f"{domain.replace('.', '')}-capsule"
 
+USER_AGENT = 'archiver'
 
 def absolutise_url(base, relative):
     """Absolutise relative links."""
@@ -245,20 +246,49 @@ def extract_posts(body: str, url_list: list) -> tuple[list, str | None]:
 
     return url_list, next_pages
 
+def check_robots_txt():
+    robots_url = urllib.parse.urlparse(BASE_URL)._replace(path='/robots.txt').geturl()
+    body = read_url(robots_url)
+    if body is None:
+        print(f'No {robots_url} found')
+        return set()
+    current_agent = False
+    disallowed = set()
+    for line in body.split('\n'):
+        line = line.lower()
+        if len(line) == 0 or line[0] == '#':
+            continue
+        if m := re.match(r'^user-agent:\s*(\S+)$', line):
+            agent = m.groups()[0]
+            current_agent = USER_AGENT in agent or '*' in agent
+        elif m := re.match(r'^disallow:\s*(\S+)$', line):
+            if current_agent:
+                disallowed.add(absolutise_url(BASE_URL, m.groups()[0]))
+    return disallowed
 
 def get_url_list() -> list:
     """Checks the base URL, retrieves the found posts, iterates through each page
     and stops when there are no more pages."""
     current_urls = [BASE_URL]
+    disallowed_urls = check_robots_txt()
     url_list: list[str] = []
 
     while len(current_urls) > 0:
+        allow = True
+        for dis in disallowed_urls:
+            if current_urls[0].startswith(dis):
+                allow = False
+        if not allow:
+            print(f'Url {current_urls[0]} disallowed by robots.txt')
+            current_urls.pop(0)
+            continue
+
         print(f"Loading {current_urls[0]}")
         body: str | None = read_url(current_urls[0])
         current_urls.pop(0)
         if body is None:
             print("A problem occured. Check your Internet or the URL!")
-            return []
+            continue
 
         url_list, next_pages = extract_posts(body, url_list)
         current_urls += [absolutise_url(BASE_URL, next_page) for next_page in next_pages]
