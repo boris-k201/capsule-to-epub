@@ -225,37 +225,23 @@ def extract_posts(body: str, url_list: list) -> tuple[list, str | None]:
     next_pages: List[str] = []
 
     for line in body.splitlines():
+        link_matched = re.match(r'^=>\s*(\S+)\s+(.*)$', line)
 
         # Not a link ? Skip to the next item
-        if line[0:2] != '=>':
+        if link_matched is None:
             continue
-        
-        link_url_pos = 2
-        while link_url_pos < len(line) and line[link_url_pos] in [' ', '\t']:
-            link_url_pos += 1
-        link_separator_pos = line.find(' ', link_url_pos)
-        link_text_pos = link_separator_pos
-        while link_text_pos < len(line) and line[link_text_pos] in [' ', '\t']:
-            link_text_pos += 1
-
-        # No link name, therefore no date, so we skip
-        if link_separator_pos == -1 or link_separator_pos == len(line)-1:
-            continue
-
-        link_url = line[link_url_pos:link_separator_pos]
-        link_text = line[link_text_pos:]
-        link_name_pos = link_text.find(' ')
-        if link_name_pos + 1 >= len(link_text):
-            continue
-        link_time = link_text[:link_name_pos]
-        link_name = link_text[link_name_pos+1:]
+        (link_url, link_text) = link_matched.groups()
 
         if re.match(TEXT_FOR_NEXT_PAGE, link_text):
             next_pages += [link_url]
 
-        if is_valid_date(link_time):
-            url = absolutise_url(BASE_URL, link_url)
-            url_list.append((url, link_time, link_name))
+        post_matched = re.match(r'(\d{4}-\d\d-\d\d)(?: - | )(.*)', link_text)
+        if post_matched is None:
+            continue
+        (post_date, post_name) = post_matched.groups()
+
+        url = absolutise_url(BASE_URL, link_url)
+        url_list.append((url, post_date, post_name))
 
     return url_list, next_pages
 
@@ -279,6 +265,7 @@ def get_url_list() -> list:
 
     # print(url_list)
     url_list.sort(key=lambda url: url[1])
+    print(url_list)
     return url_list
 
 
